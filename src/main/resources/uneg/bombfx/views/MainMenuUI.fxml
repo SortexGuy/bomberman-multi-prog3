@@ -15,7 +15,7 @@
             <Font size="50.0" />
          </font>
       </Label>
-      <VBox fx:id="mainButtonsCont" alignment="TOP_CENTER" layoutX="50.0" layoutY="180.0" prefHeight="300.0" prefWidth="300.0" style="-fx-background-color: 0;">
+      <VBox fx:id="mainButtonsCont" alignment="TOP_CENTER" layoutX="50.0" layoutY="180.0" prefHeight="300.0" prefWidth="300.0">
          <children>
             <Button fx:id="serverButton" defaultButton="true" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#OnServerButtonClicked" style="-fx-text-alignment: JUSTIFY; -fx-alignment: CENTER_LEFT; -fx-background-insets: 4; -fx-background-radius: 20; -fx-background-color: #DA001E; -fx-border-width: 4; -fx-border-radius: 20; -fx-border-color: #6B000F;" text="Create Server" textFill="#dadada" VBox.vgrow="ALWAYS">
                <VBox.margin>
