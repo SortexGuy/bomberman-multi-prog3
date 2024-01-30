@@ -1,6 +1,5 @@
 package uneg.bombfx.views;
 
-import java.io.IOException;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -28,13 +27,13 @@ public class MainMenuController {
     @FXML
     void OnServerButtonClicked(ActionEvent event) {
         App.setHosting(true);
-        App.setRoot("views/MainGameUI");
+        App.setRoot("views/LobbyUI");
     }
 
     @FXML
     void OnJoinButtonClicked(ActionEvent event) {
         App.setHosting(false);
-        App.setRoot("views/MainGameUI");
+        App.setRoot("views/LobbyUI");
     }
 
     @FXML

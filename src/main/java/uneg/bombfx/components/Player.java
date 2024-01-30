@@ -1,7 +1,6 @@
 package uneg.bombfx.components;
 
 import javafx.geometry.Point2D;
-import javafx.geometry.Rectangle2D;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -21,14 +20,17 @@ public class Player {
         size = new Point2D(24, 24);
     }
 
-    public void handleInput(KeyEvent e) {
-        if (id != 0)
-            return;
-        double x = (e.getCode() == KeyCode.A) ? -1.0 : (e.getCode() == KeyCode.D) ? 1.0 : 0;
-        double y = (e.getCode() == KeyCode.W) ? -1.0 : (e.getCode() == KeyCode.S) ? 1.0 : 0;
-        Point2D dir = new Point2D(x, y).normalize();
-        pos = pos.add(dir.multiply(5.0));
-    }
+    // public void handleInput(KeyEvent e, Networked connection) {
+    // if (id != 0)
+    // return;
+    // double x = (e.getCode() == KeyCode.A) ? -1.0 : (e.getCode() == KeyCode.D) ?
+    // 1.0 : 0;
+    // double y = (e.getCode() == KeyCode.W) ? -1.0 : (e.getCode() == KeyCode.S) ?
+    // 1.0 : 0;
+    // Point2D dir = new Point2D(x, y).normalize();
+    // pos = pos.add(dir.multiply(5.0));
+    // connection.sendSyncState(pos);
+    // }
 
     public void draw(GraphicsContext gContext) {
         Point2D realPos = new Point2D(pos.getX() - size.getX() / 2, pos.getY() - size.getY() / 2);
@@ -43,5 +45,21 @@ public class Player {
 
     public void setId(int id) {
         this.id = id;
+    }
+
+    public Point2D getPos() {
+        return pos;
+    }
+
+    public void setPos(Point2D pos) {
+        this.pos = pos;
+    }
+
+    public Point2D getSize() {
+        return size;
+    }
+
+    public void setSize(Point2D size) {
+        this.size = size;
     }
 }
