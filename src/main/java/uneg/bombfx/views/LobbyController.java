@@ -40,32 +40,27 @@ public class LobbyController implements Initializable {
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         App.setGameEngine(new Engine());
+        Engine appEngine = App.getGameEngine();
 
         if (App.isHosting())
-            App.getGameEngine().connectServer();
-        else
-            App.getGameEngine().connectClient();
+            appEngine.connectServer(4321);
 
-        new Thread(() -> {
-            App.getGameEngine().startup(sendButton, textBox, chatField, new Engine.LabelAdder() {
-                public void addLabel(String message, VBox myTextBox) {
-                    LobbyController.addLabel(message, myTextBox);
-                }
-            }, false);
-        }).start();
+        appEngine.connectClient("localhost", 4321);
+
+        appEngine.startup(sendButton, textBox, chatField, new Engine.LabelAdder() {
+            public void addLabel(String message, VBox myTextBox) {
+                LobbyController.addLabel(message, myTextBox);
+            }
+        }, false);
 
         backButton.setOnAction(e -> {
-            App.getGameEngine().closeConnection();
+            appEngine.closeConnection();
             App.setGameEngine(null);
             App.setRoot("views/MainMenuUI");
         });
 
-        startButton.setOnAction(e -> {
-            // if (App.isHosting() && App.getGameEngine().getPlayers().size() > 1)
-            if (App.isHosting())
-                App.getGameEngine().startGame();
-            App.setRoot("views/MainGameUI");
-        });
+        startButton.disableProperty().setValue(!App.isHosting());
+        startButton.setOnAction(e -> { appEngine.startHostingGame(); });
     }
 
     public static void addLabel(String message, VBox myTextBox) {
@@ -76,8 +71,8 @@ public class LobbyController implements Initializable {
         Text text = new Text(message);
         TextFlow textFlow = new TextFlow(text);
 
-        textFlow.setStyle("-fx-background-color: rgba(25, 25, 25, 128); "
-                + "-fx-color: rgb(255, 255, 255);");
+        // textFlow.setStyle("-fx-background-color: rgba(25, 25, 25, 128); "
+        // + "-fx-color: rgb(255, 255, 255);");
         textFlow.setPadding(new Insets(2, 4, 2, 4));
         text.setFill(new Color(0.2, 0.2, 0.2, 0.4));
 

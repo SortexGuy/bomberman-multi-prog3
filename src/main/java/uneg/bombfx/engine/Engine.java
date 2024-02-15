@@ -1,7 +1,9 @@
 package uneg.bombfx.engine;
 
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
+import javafx.event.EventType;
 import javafx.geometry.Point2D;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
@@ -14,15 +16,13 @@ import javafx.scene.paint.Color;
 import uneg.bombfx.App;
 import uneg.bombfx.components.Player;
 import uneg.bombfx.networking.Client;
-import uneg.bombfx.networking.Networked;
-import uneg.bombfx.networking.Networked.ConnFlags;
 import uneg.bombfx.networking.Server;
 
 /**
  * Engine
  */
 public class Engine {
-    static private Player player1;
+    private Player[] players;
     private GraphicsContext gContext;
     private Server server;
     private Client client;
@@ -31,33 +31,41 @@ public class Engine {
     private boolean isHost = false;
 
     public Engine() {
-        player1 = new Player(0);
     }
 
     public static interface LabelAdder {
         public void addLabel(String message, VBox textBox);
     }
 
-    public void connectServer() {
+    public static interface PlayerSyncObj {
+        public void syncPos(int id, Point2D pos);
+    }
+
+    public void connectServer(int listenPort) {
         // Server initialization
         isHost = true;
         tmpThread = new Thread(() -> {
             try {
-                server = new Server(4321);
+                server = new Server(listenPort);
             } catch (Exception e) {
                 System.out.println("Error connecting to the network.");
                 System.err.println("[!!Error!!] " + e.getMessage());
             }
         });
         tmpThread.start();
+        try {
+            System.err.println("Waiting 2 seconds...");
+            TimeUnit.SECONDS.sleep(2);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    public void connectClient() {
+    public void connectClient(String serverIP, int serverPort) {
         // Client initialization
-        isHost = false;
         try {
-            InetAddress ip = InetAddress.getLocalHost();
-            client = new Client(ip.getHostName(), 4321);
+            InetAddress ip = InetAddress.getByName(serverIP);
+            client = new Client(ip, serverPort);
         } catch (Exception e) {
             System.out.println("Error connecting to the network.");
             System.err.println("[!!Error!!] " + e.getMessage());
@@ -74,32 +82,36 @@ public class Engine {
 
         // Message receiving
         if (isHost) {
-            if (!server.clients.isEmpty()) {
-                for (Server.ClientItem c : server.clients)
-                    if (c.tmpThread != null)
-                        c.tmpThread.interrupt();
-            }
+            server.interruptClients();
 
             if (stopConnecting) {
                 server.interruptConnection();
-                server.listenForPackets(textBox, la);
+                server.listenForPackets();
             } else {
-                server.listenForConnections(textBox, la);
+                server.listenForConnections();
             }
-        } else
-            client.listenForPackets(textBox, la);
+        }
+        client.listenForPackets(textBox, la);
 
+        messageField.onKeyReleasedProperty().set(e -> {
+            if (e.getCode() != KeyCode.ENTER)
+                return;
+            String message = messageField.getText();
+            if (message.isEmpty())
+                return;
+
+            la.addLabel(message, textBox);
+            client.sendMessage(message);
+
+            messageField.clear();
+        });
         sendButton.setOnAction(e -> {
             String message = messageField.getText();
             if (message.isEmpty())
                 return;
 
             la.addLabel(message, textBox);
-
-            if (isHost)
-                server.sendMessage(message);
-            else
-                client.sendMessage(message);
+            client.sendMessage(message);
 
             messageField.clear();
         });
@@ -107,33 +119,51 @@ public class Engine {
 
     public void startup(Button sendButton, VBox textBox, TextField messageField, LabelAdder la,
             GraphicsContext gContext) {
+        int playerCount = client.getPlayerCount();
+
+        if (players == null) {
+            players = new Player[playerCount];
+        }
+        for (int i = 0; i < playerCount; i++) {
+            players[i] = new Player(i);
+        }
+        System.err.println("Starting game, with " + playerCount + " players");
+
         this.gContext = gContext;
         startup(sendButton, textBox, messageField, la, true);
-    }
-
-    public void sendNetworkedMsg(String message) {
-        if (isHost)
-            server.sendMessage(message);
-        else
-            client.sendMessage(message);
     }
 
     public void draw(double gameWidth, double gameHeight) {
         gContext.setFill(Color.GRAY);
         gContext.fillRect(0, 0, gameWidth, gameHeight);
-        player1.draw(gContext);
+
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                int size = 48;
+                gContext.setFill(Color.BLACK);
+                gContext.fillRect(i * size, j * size, size, size);
+                gContext.setFill(Color.WHITE);
+                gContext.rect(i * size, j * size, size, size);
+            }
+        }
+
+        for (Player p : players) {
+            p.draw(gContext);
+        }
     }
 
     public void handleKeyPressed(KeyEvent e) {
         if (e.getCode() == KeyCode.ESCAPE) {
             if (isHost)
                 server.closeEverything();
-            else
-                client.closeEverything();
+
+            client.closeEverything();
             App.setRoot("views/MainMenuUI");
         }
-
-        // player1.handleInput(e, connection);
+        for (Player p : players) {
+            if (p.getId() == client.getId())
+                p.handleInput(e, client);
+        }
     }
 
     public void closeConnection() {
@@ -145,13 +175,25 @@ public class Engine {
             tmpThread.interrupt();
     }
 
-    public static void setPlayerPosition(Point2D newPlayerPos) {
-        player1.setPos(newPlayerPos);
+    public void startHostingGame() {
+        server.startGame();
     }
 
     public void startGame() {
-        if (isHost) {
-            server.sendFlagMsg(ConnFlags.StartGame);
-        }
+        client.setSyncObj(new PlayerSyncObj() {
+            public void syncPos(int id, Point2D pos) {
+                for (Player p : players) {
+                    if (p.getId() != id)
+                        continue;
+
+                    p.setPos(pos);
+                }
+            }
+        });
+        App.setRoot("views/MainGameUI");
+    }
+
+    public Player[] getPlayers() {
+        return players;
     }
 }

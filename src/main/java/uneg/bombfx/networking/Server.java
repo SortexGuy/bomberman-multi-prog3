@@ -4,13 +4,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 import javafx.geometry.Point2D;
-import javafx.scene.layout.VBox;
-
-import uneg.bombfx.App;
-import uneg.bombfx.engine.Engine.LabelAdder;
 
 /**
  * Server class with {@link Networked} operations
@@ -38,18 +34,31 @@ public class Server implements Networked {
                 System.err.println("[!!Error]> Error creating client item: " + e.getMessage());
             }
         }
+
+        public void close() {
+            listening = false;
+            tmpThread.interrupt();
+            try {
+                socket.close();
+                inputStream.close();
+                outputStream.close();
+            } catch (Exception e) {
+                System.err.println("[!!Error]> Closing client");
+                e.printStackTrace();
+                closeEverything();
+            }
+        }
     }
 
-    public ArrayList<ClientItem> clients = new ArrayList<>();
+    private ArrayList<ClientItem> clients = new ArrayList<>();
     private Thread connectionThread;
     private ServerSocket hostSocket;
     private int localPort;
 
-    /**
-     * @param localPort
-     * @throws IOException
-     */
     public Server(int localPort) throws Exception {
+        clients.clear();
+        ClientItem.clientsConnected = 0;
+
         this.localPort = localPort;
         try {
             connect(this.localPort);
@@ -63,16 +72,29 @@ public class Server implements Networked {
         this.hostSocket = new ServerSocket(localPort);
     }
 
-    public void listenForConnections(VBox textBox, LabelAdder la) {
+    public void listenForConnections() {
         if (connectionThread != null)
             connectionThread.interrupt();
         connectionThread = new Thread(() -> {
             while (!hostSocket.isClosed()) {
+                if (clients.size() >= 4) {
+                    try {
+                        System.err.println("Waiting 2 seconds...");
+                        TimeUnit.SECONDS.sleep(2);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    continue;
+                }
                 try {
                     ClientItem client = new ClientItem(hostSocket.accept());
                     clients.add(client);
+                    System.err.println("Connecting client with id: " + client.id);
+                    client.outputStream.writeByte(ConnFlags.SendIds.getAsByte());
+                    client.outputStream.writeInt(client.id);
+                    client.outputStream.flush();
 
-                    listenForPackets(textBox, la);
+                    listenForPackets();
                 } catch (Exception e) {
                     System.err.println("[!!Error]> Connecting with clients: " + e.getMessage());
                     e.printStackTrace();
@@ -84,7 +106,7 @@ public class Server implements Networked {
         connectionThread.start();
     }
 
-    public void listenForPackets(VBox textBox, LabelAdder la) {
+    public void listenForPackets() {
         for (ClientItem client : clients) {
             if (client.listening)
                 continue;
@@ -97,30 +119,53 @@ public class Server implements Networked {
                             case Message:
                                 String message = client.inputStream.readUTF();
                                 sendMsgFromClient(client.id, message);
-                                message = "[" + client.id + "]: " + message;
-                                la.addLabel(message, textBox);
-                                break;
-                            case PlayerConnected:
                                 break;
                             case PlayerDisconnected:
+                                client.close();
+                                if (clients.indexOf(client) == 0) {
+                                    closeEverything();
+                                    break;
+                                }
+                                clients.remove(client);
+                                break;
+                            case SyncPlayer:
+                                syncPlayerState(client);
+                                break;
+                            case SendIds:
+                                client.outputStream.writeByte(ConnFlags.SendIds.getAsByte());
+                                client.outputStream.writeInt(client.id);
+                                client.outputStream.flush();
                                 break;
                             case CloseConnection:
-                                break;
+                                // break;
                             case Invalid:
-                                throw new Exception("Invalid flag");
                             default:
                                 break;
+                                // throw new Exception("Invalid flag");
                         }
                     } catch (Exception e) {
                         System.err.println("[!!Error]> Receiving message: " + e.getMessage());
                         e.printStackTrace();
-                        closeEverything();
+                        client.close();
+                        clients.remove(client);
                         break;
                     }
                 }
             });
             client.tmpThread.start();
             client.listening = true;
+        }
+    }
+
+    private void syncPlayerState(ClientItem client) throws Exception {
+        Point2D pos = new Point2D(client.inputStream.readFloat(), client.inputStream.readFloat());
+        for (ClientItem c : clients) {
+            if (c.id == client.id)
+                continue;
+            c.outputStream.writeByte(ConnFlags.SyncPlayer.getAsByte());
+            c.outputStream.writeInt(c.id);
+            c.outputStream.writeFloat((float) pos.getX());
+            c.outputStream.writeFloat((float) pos.getY());
         }
     }
 
@@ -144,8 +189,25 @@ public class Server implements Networked {
 
     public void sendFlagMsg(ConnFlags flag) {
         try {
-            for (ClientItem client : clients)
+            for (ClientItem client : clients) {
                 client.outputStream.writeByte(flag.getAsByte());
+                client.outputStream.flush();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("[!!Error]> Sending message: " + e.getMessage());
+            closeEverything();
+        }
+    }
+
+    public void startGame() {
+        ConnFlags flag = ConnFlags.StartGame;
+        try {
+            for (ClientItem client : clients) {
+                client.outputStream.writeByte(flag.getAsByte());
+                client.outputStream.writeInt(clients.size());
+                client.outputStream.flush();
+            }
         } catch (Exception e) {
             e.printStackTrace();
             System.err.println("[!!Error]> Sending message: " + e.getMessage());
@@ -168,39 +230,12 @@ public class Server implements Networked {
         }
     }
 
-    @Override
-    public void receiveSyncState(ByteBuffer syncedState) {
-        // byte flags = syncedState.get();
-        // if (flags == 0b00000001) {
-        // Point2D newPlayerPos = new Point2D(syncedState.getFloat(),
-        // syncedState.getFloat());
-        // MainGameController.setPlayerPosition(newPlayerPos);
-        // }
-    }
-
-    @Override
-    public void sendSyncState(Point2D state) {
-        // byte flags = 0b00000001;
-        // ByteBuffer syncedState = ByteBuffer.allocate(9);
-        // syncedState.put(flags);
-        // syncedState.putFloat((float) state.getX());
-        // syncedState.putFloat((float) state.getY());
-        //
-        // try {
-        // } catch (Exception e) {
-        // e.printStackTrace();
-        // System.out.println("Error sending message: " + e.getMessage());
-        // closeEverything();
-        // }
-    }
-
     public void closeEverything() {
         try {
             for (ClientItem client : clients) {
-                if (client.socket != null)
-                    client.socket.close();
-                client.tmpThread.interrupt();
-                client.listening = false;
+                client.outputStream.writeByte(ConnFlags.CloseConnection.getAsByte());
+                client.outputStream.flush();
+                client.close();
             }
             if (hostSocket != null)
                 hostSocket.close();
@@ -213,8 +248,19 @@ public class Server implements Networked {
         }
     }
 
+    public void interruptClients() {
+        for (ClientItem client : clients) {
+            if (client.tmpThread != null)
+                client.tmpThread.interrupt();
+        }
+    }
+
     public void interruptConnection() {
         if (connectionThread != null)
             connectionThread.interrupt();
+    }
+
+    public ArrayList<ClientItem> getClients() {
+        return clients;
     }
 }

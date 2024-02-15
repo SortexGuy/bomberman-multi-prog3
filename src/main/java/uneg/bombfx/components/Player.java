@@ -6,6 +6,8 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.paint.Color;
 
+import uneg.bombfx.networking.Client;
+
 /**
  * Player
  */
@@ -16,21 +18,20 @@ public class Player {
 
     public Player(int id) {
         this.id = id;
+        // pos = new Point2D((id % 2) * (48 * 8), (id / 3) * (48 * 8));
         pos = new Point2D(0, 0);
-        size = new Point2D(24, 24);
+        size = new Point2D(32, 32);
     }
 
-    // public void handleInput(KeyEvent e, Networked connection) {
-    // if (id != 0)
-    // return;
-    // double x = (e.getCode() == KeyCode.A) ? -1.0 : (e.getCode() == KeyCode.D) ?
-    // 1.0 : 0;
-    // double y = (e.getCode() == KeyCode.W) ? -1.0 : (e.getCode() == KeyCode.S) ?
-    // 1.0 : 0;
-    // Point2D dir = new Point2D(x, y).normalize();
-    // pos = pos.add(dir.multiply(5.0));
-    // connection.sendSyncState(pos);
-    // }
+    public void handleInput(KeyEvent e, Client connection) {
+        if (id != 0)
+            return;
+        double x = (e.getCode() == KeyCode.A) ? -1.0 : (e.getCode() == KeyCode.D) ? 1.0 : 0;
+        double y = (e.getCode() == KeyCode.W) ? -1.0 : (e.getCode() == KeyCode.S) ? 1.0 : 0;
+        Point2D dir = new Point2D(x, y).normalize();
+        pos = pos.add(dir.multiply(5.0));
+        connection.sendSyncPPos(pos);
+    }
 
     public void draw(GraphicsContext gContext) {
         Point2D realPos = new Point2D(pos.getX() - size.getX() / 2, pos.getY() - size.getY() / 2);

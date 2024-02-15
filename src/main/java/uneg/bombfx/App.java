@@ -24,6 +24,7 @@ public class App extends Application {
             Parent hierarchy = App.loadFromFXML(fxml);
             scene.setRoot(hierarchy);
         } catch (Exception e) {
+            e.printStackTrace();
             System.err.println("[!!Error] Could not load FXML: " + fxml);
             System.err.println("[!!Error] Error message: " + e.getMessage());
         }

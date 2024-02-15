@@ -4,27 +4,32 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 import javafx.geometry.Point2D;
 import javafx.scene.layout.VBox;
 
 import uneg.bombfx.App;
 import uneg.bombfx.engine.Engine.LabelAdder;
+import uneg.bombfx.engine.Engine.PlayerSyncObj;
 
 /**
  * Client class with {@link Networked} operations
  */
 public class Client implements Networked {
     public Thread tmpThread;
+
+    private int id;
+    private int playerCount;
+    private PlayerSyncObj syncObj;
+
     private Socket socket;
     private DataInputStream inputStream;
     private DataOutputStream outputStream;
     private InetAddress serverAddr;
     private int serverPort;
 
-    public Client(String serverIp, int serverPort) throws Exception {
-        this.serverAddr = InetAddress.getByName(serverIp);
+    public Client(InetAddress serverIp, int serverPort) throws Exception {
+        this.serverAddr = serverIp;
         this.serverPort = serverPort;
         try {
             connect(this.serverAddr, this.serverPort);
@@ -38,13 +43,37 @@ public class Client implements Networked {
         this.inputStream = new DataInputStream(socket.getInputStream());
         this.outputStream = new DataOutputStream(socket.getOutputStream());
         this.socket.setTcpNoDelay(true);
-        // this.outputStream.writeByte(ConnFlags.PlayerConnected.getAsByte());
-        // this.outputStream.flush();
+
+        try {
+            System.err.println("Waiting 1 seconds...");
+            TimeUnit.SECONDS.sleep(1);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        new Thread(() -> {
+            try {
+                byte flag = inputStream.readByte();
+                if (flag != ConnFlags.SendIds.getAsByte()) {
+                    throw new Exception("Wrong flag for id");
+                }
+                this.id = inputStream.readInt();
+                System.err.println("\n\n ->>> Connected to server with id: " + this.id);
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("[!!Error]> Receiving id: " + e.getMessage());
+            }
+        }).start();
     }
 
     public void listenForPackets(VBox textBox, LabelAdder la) {
-        if (tmpThread != null)
+        System.err.println("Listening for packets...");
+        if (tmpThread != null) {
+            System.err.println("Interrupting thread...");
             tmpThread.interrupt();
+        }
+        tmpThread = null;
+        System.err.println("Creating thread...");
         tmpThread = new Thread(() -> {
             while (socket.isConnected()) {
                 try {
@@ -53,24 +82,30 @@ public class Client implements Networked {
                     switch (ConnFlags.fromByte(flag)) {
                         case Message:
                             String message = inputStream.readUTF();
+                            System.err.println("Received message: " + message);
                             la.addLabel(message, textBox);
                             break;
-                        case PlayerConnected:
-                            System.err.println("Player connected");
-                            break;
-                        case PlayerDisconnected:
-                            System.err.println("Player disconnected");
-                            break;
                         case CloseConnection:
-                            System.err.println("Closing connection");
+                            closeEverything();
+                            App.setRoot("views/MainMenuUI");
                             break;
                         case StartGame:
-                            App.setRoot("views/MainGameUI");
+                            playerCount = inputStream.readInt();
+                            System.err.println("Starting game, with " + playerCount + " players");
+                            App.getGameEngine().startGame();
+                            break;
+                        case SyncPlayer:
+                            if (syncObj == null)
+                                break;
+                            handlePlayerSync();
+                            break;
+                        // case PlayerConnected:
+                        case PlayerDisconnected:
                             break;
                         case Invalid:
-                            throw new Exception("Invalid flag");
                         default:
                             break;
+                            // throw new Exception("Invalid flag");
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -81,6 +116,14 @@ public class Client implements Networked {
             }
         });
         tmpThread.start();
+    }
+
+    private void handlePlayerSync() throws Exception {
+        // Handle pos
+        int targetId = inputStream.readInt();
+        Point2D targetPos = new Point2D(inputStream.readFloat(), inputStream.readFloat());
+
+        syncObj.syncPos(targetId, targetPos);
     }
 
     public void sendFlagMsg(ConnFlags flag) {
@@ -98,6 +141,8 @@ public class Client implements Networked {
         try {
             outputStream.writeByte(ConnFlags.Message.getAsByte());
             outputStream.writeUTF(message);
+            System.err.println("Sending message: " + outputStream.toString());
+            System.err.println("With socket: " + socket.getInetAddress());
             outputStream.flush();
         } catch (Exception e) {
             e.printStackTrace();
@@ -106,37 +151,38 @@ public class Client implements Networked {
         }
     }
 
-    @Override
-    public void receiveSyncState(ByteBuffer syncedState) {
-        // byte flags = syncedState.get();
-        // if (flags == 0b00000001) {
-        // Point2D newPlayerPos = new Point2D(syncedState.getFloat(),
-        // syncedState.getFloat());
-        // MainGameController.setPlayerPosition(newPlayerPos);
-        // }
+    public void sendSyncPPos(Point2D pos) {
+        ConnFlags flag = ConnFlags.SyncPlayer;
+        try {
+            outputStream.writeByte(flag.getAsByte());
+            outputStream.writeFloat((float) pos.getX());
+            outputStream.writeFloat((float) pos.getY());
+            outputStream.flush();
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("[!!Error]> Sending message: " + e.getMessage());
+            closeEverything();
+        }
     }
 
-    @Override
-    public void sendSyncState(Point2D state) {
-        // byte flags = 0b00000001;
-        // ByteBuffer syncedState = ByteBuffer.allocate(9);
-        // syncedState.put(flags);
-        // syncedState.putFloat((float) state.getX());
-        // syncedState.putFloat((float) state.getY());
-        //
-        // try {
-        // DatagramPacket packet =
-        // new DatagramPacket(syncedState.array(), syncedState.array().length);
-        // socket.send(packet);
-        // } catch (Exception e) {
-        // e.printStackTrace();
-        // System.out.println("Error sending message: " + e.getMessage());
-        // closeEverything(socket);
-        // }
+    public int waitForId() {
+        sendFlagMsg(ConnFlags.SendIds);
+        try {
+            byte flag = inputStream.readByte();
+            if (flag == ConnFlags.SendIds.getAsByte()) {
+                return inputStream.readInt();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("[!!Error]> Receiving ID: " + e.getMessage());
+        }
+        return -1;
     }
 
     public void closeEverything() {
         try {
+            outputStream.writeByte(ConnFlags.PlayerDisconnected.getAsByte());
+            outputStream.flush();
             if (inputStream != null)
                 inputStream.close();
             if (outputStream != null)
@@ -148,5 +194,17 @@ public class Client implements Networked {
         } catch (Exception e) {
             System.err.println("Error closing everything: " + e.getMessage());
         }
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public int getPlayerCount() {
+        return playerCount;
+    }
+
+    public void setSyncObj(PlayerSyncObj syncObj) {
+        this.syncObj = syncObj;
     }
 }
