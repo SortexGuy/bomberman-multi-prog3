@@ -39,19 +39,34 @@ public class LobbyController implements Initializable {
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
-        App.setGameEngine(new Engine());
-        Engine appEngine = App.getGameEngine();
+        Engine appEngine = new Engine();
+        App.setGameEngine(appEngine);
 
-        if (App.isHosting())
-            appEngine.connectServer(4321);
+        if (App.isHosting()) {
+            try {
+                appEngine.connectServer(4321);
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("Error creating server: " + e.getMessage());
+            }
+        }
+        try {
+            appEngine.connectClient("localhost", 4321);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("Error creating client: " + e.getMessage());
+        }
 
-        appEngine.connectClient("localhost", 4321);
-
-        appEngine.startup(sendButton, textBox, chatField, new Engine.LabelAdder() {
+        appEngine.prepare(sendButton, textBox, chatField, new Engine.LabelAdder() {
             public void addLabel(String message, VBox myTextBox) {
                 LobbyController.addLabel(message, myTextBox);
             }
-        }, false);
+        });
+        // appEngine.startup(sendButton, textBox, chatField, new Engine.LabelAdder() {
+        // public void addLabel(String message, VBox myTextBox) {
+        // LobbyController.addLabel(message, myTextBox);
+        // }
+        // }, false);
 
         backButton.setOnAction(e -> {
             appEngine.closeConnection();

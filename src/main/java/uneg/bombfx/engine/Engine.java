@@ -1,10 +1,8 @@
 package uneg.bombfx.engine;
 
 import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
-import javafx.event.EventType;
 import javafx.geometry.Point2D;
+import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
@@ -22,16 +20,15 @@ import uneg.bombfx.networking.Server;
  * Engine
  */
 public class Engine {
+    private GameLoop gameLoop;
+    private int tickCount = 0;
+    private double timeMsToTick = 0;
     private Player[] players;
     private GraphicsContext gContext;
-    private Server server;
-    private Client client;
-    private Thread tmpThread;
 
     private boolean isHost = false;
-
-    public Engine() {
-    }
+    private Server server;
+    private Client client;
 
     public static interface LabelAdder {
         public void addLabel(String message, VBox textBox);
@@ -41,58 +38,97 @@ public class Engine {
         public void syncPos(int id, Point2D pos);
     }
 
-    public void connectServer(int listenPort) {
+    public void connectServer(int listenPort) throws Exception {
         // Server initialization
         isHost = true;
-        tmpThread = new Thread(() -> {
-            try {
-                server = new Server(listenPort);
-            } catch (Exception e) {
-                System.out.println("Error connecting to the network.");
-                System.err.println("[!!Error!!] " + e.getMessage());
-            }
-        });
-        tmpThread.start();
-        try {
-            System.err.println("Waiting 2 seconds...");
-            TimeUnit.SECONDS.sleep(2);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        server = new Server(listenPort);
     }
 
-    public void connectClient(String serverIP, int serverPort) {
+    public void connectClient(String serverIP, int serverPort) throws Exception {
         // Client initialization
-        try {
-            InetAddress ip = InetAddress.getByName(serverIP);
-            client = new Client(ip, serverPort);
-        } catch (Exception e) {
-            System.out.println("Error connecting to the network.");
-            System.err.println("[!!Error!!] " + e.getMessage());
+        InetAddress ip = InetAddress.getByName(serverIP);
+        client = new Client(ip, serverPort);
+    }
+
+    public void prepare(
+            Button sendButton, VBox textBox, TextField chatField, LabelAdder labelAdder) {
+        // Message receiving
+        if (isHost) {
+            server.interruptClients();
+            server.listenForConnections();
         }
+        try {
+            client.connect();
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("Error connecting client: " + e.getMessage());
+            closeConnection();
+            return;
+        }
+        client.listenForPackets(textBox, labelAdder);
+
+        // Chat setup
+        chatField.onKeyReleasedProperty().set(e -> {
+            if (e.getCode() != KeyCode.ENTER)
+                return;
+            String message = chatField.getText();
+            if (message.isEmpty())
+                return;
+
+            labelAdder.addLabel(message, textBox);
+            client.sendMessage(message);
+
+            chatField.clear();
+        });
+
+        sendButton.focusTraversableProperty().setValue(false);
+        sendButton.setOnAction(e -> {
+            String message = chatField.getText();
+            if (message.isEmpty())
+                return;
+
+            labelAdder.addLabel(message, textBox);
+            client.sendMessage(message);
+
+            chatField.clear();
+        });
     }
 
     public void startup(Button sendButton, VBox textBox, TextField messageField, LabelAdder la,
-            Boolean stopConnecting) {
-        try {
-            TimeUnit.SECONDS.sleep(2);
-        } catch (Exception e) {
-            e.printStackTrace();
+            Canvas gameCanvas) {
+        int playerCount = client.getPlayerCount();
+
+        if (players == null) {
+            players = new Player[playerCount];
         }
+        for (int i = 0; i < playerCount; i++) {
+            players[i] = new Player(i);
+        }
+
+        client.setSyncObj(new PlayerSyncObj() {
+            public void syncPos(int id, Point2D pos) {
+                for (Player p : players) {
+                    if (p.getId() != id)
+                        continue;
+
+                    p.setPos(pos);
+                }
+            }
+        });
+        System.err.println("Starting game, with " + playerCount + " players");
+
+        this.gContext = gameCanvas.getGraphicsContext2D();
 
         // Message receiving
         if (isHost) {
             server.interruptClients();
 
-            if (stopConnecting) {
-                server.interruptConnection();
-                server.listenForPackets();
-            } else {
-                server.listenForConnections();
-            }
+            server.interruptConnection();
+            server.listenForPackets();
         }
         client.listenForPackets(textBox, la);
 
+        // Chat setup
         messageField.onKeyReleasedProperty().set(e -> {
             if (e.getCode() != KeyCode.ENTER)
                 return;
@@ -105,6 +141,7 @@ public class Engine {
 
             messageField.clear();
         });
+        sendButton.focusTraversableProperty().setValue(false);
         sendButton.setOnAction(e -> {
             String message = messageField.getText();
             if (message.isEmpty())
@@ -115,35 +152,54 @@ public class Engine {
 
             messageField.clear();
         });
+
+        gameLoop = new GameLoop() {
+            @Override
+            public void tick(double deltaTime) {
+                update(deltaTime);
+                draw(gameCanvas.getWidth(), gameCanvas.getHeight());
+            }
+
+            public void sync(double deltaTime) {
+                float tickDur = 0.25f;
+                timeMsToTick += deltaTime;
+                if (timeMsToTick >= tickDur) {
+                    syncEngine();
+
+                    tickCount++;
+                    timeMsToTick -= tickDur;
+                }
+            }
+        };
     }
 
-    public void startup(Button sendButton, VBox textBox, TextField messageField, LabelAdder la,
-            GraphicsContext gContext) {
-        int playerCount = client.getPlayerCount();
-
-        if (players == null) {
-            players = new Player[playerCount];
-        }
-        for (int i = 0; i < playerCount; i++) {
-            players[i] = new Player(i);
-        }
-        System.err.println("Starting game, with " + playerCount + " players");
-
-        this.gContext = gContext;
-        startup(sendButton, textBox, messageField, la, true);
+    public void start() {
+        gameLoop.start();
     }
 
-    public void draw(double gameWidth, double gameHeight) {
+    private void update(double deltaTime) {
+        players[client.getId()].update(deltaTime);
+    }
+
+    private void syncEngine() {
+        players[client.getId()].sync(client);
+    }
+
+    private void draw(double gameWidth, double gameHeight) {
         gContext.setFill(Color.GRAY);
         gContext.fillRect(0, 0, gameWidth, gameHeight);
 
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
                 int size = 48;
-                gContext.setFill(Color.BLACK);
-                gContext.fillRect(i * size, j * size, size, size);
-                gContext.setFill(Color.WHITE);
+                gContext.beginPath();
                 gContext.rect(i * size, j * size, size, size);
+                gContext.closePath();
+                gContext.setFill(Color.BLACK);
+                gContext.fill();
+                gContext.setStroke(Color.WHITE);
+                gContext.setLineWidth(2);
+                gContext.stroke();
             }
         }
 
@@ -153,26 +209,24 @@ public class Engine {
     }
 
     public void handleKeyPressed(KeyEvent e) {
-        if (e.getCode() == KeyCode.ESCAPE) {
-            if (isHost)
-                server.closeEverything();
+        players[client.getId()].handleInputPressed(e);
+    }
 
-            client.closeEverything();
+    public void handleKeyReleased(KeyEvent e) {
+        if (e.getCode() == KeyCode.ESCAPE) {
+            closeConnection();
             App.setRoot("views/MainMenuUI");
         }
-        for (Player p : players) {
-            if (p.getId() == client.getId())
-                p.handleInput(e, client);
-        }
+        players[client.getId()].handleInputReleased(e);
     }
 
     public void closeConnection() {
+        gameLoop.stop();
+        gameLoop = null;
         if (server != null)
             server.closeEverything();
         if (client != null)
             client.closeEverything();
-        if (tmpThread != null)
-            tmpThread.interrupt();
     }
 
     public void startHostingGame() {
@@ -180,16 +234,6 @@ public class Engine {
     }
 
     public void startGame() {
-        client.setSyncObj(new PlayerSyncObj() {
-            public void syncPos(int id, Point2D pos) {
-                for (Player p : players) {
-                    if (p.getId() != id)
-                        continue;
-
-                    p.setPos(pos);
-                }
-            }
-        });
         App.setRoot("views/MainGameUI");
     }
 

@@ -16,7 +16,7 @@ public class Server implements Networked {
         public static int clientsConnected = 0;
         public int id;
         public Socket socket;
-        public Boolean listening = false;
+        public boolean listening = false;
         public Thread tmpThread;
         public DataInputStream inputStream;
         public DataOutputStream outputStream;
@@ -24,12 +24,12 @@ public class Server implements Networked {
         public ClientItem(Socket socket) {
             this.socket = socket;
             this.id = ClientItem.clientsConnected;
-            ClientItem.clientsConnected++;
+            ClientItem.clientsConnected += 1;
 
             try {
-                this.socket.setTcpNoDelay(true);
                 this.inputStream = new DataInputStream(this.socket.getInputStream());
                 this.outputStream = new DataOutputStream(this.socket.getOutputStream());
+                this.socket.setTcpNoDelay(true);
             } catch (Exception e) {
                 System.err.println("[!!Error]> Error creating client item: " + e.getMessage());
             }
@@ -50,26 +50,23 @@ public class Server implements Networked {
         }
     }
 
-    private ArrayList<ClientItem> clients = new ArrayList<>();
+    private ArrayList<ClientItem> clients;
     private Thread connectionThread;
     private ServerSocket hostSocket;
     private int localPort;
 
     public Server(int localPort) throws Exception {
+        clients = new ArrayList<>();
         clients.clear();
         ClientItem.clientsConnected = 0;
 
         this.localPort = localPort;
         try {
-            connect(this.localPort);
+            this.hostSocket = new ServerSocket(this.localPort);
         } catch (Exception e) {
+            e.printStackTrace();
             throw new Exception("Creating server socket: " + e.getMessage());
         }
-    }
-
-    public void connect(int localPort) throws Exception {
-        // Crear socket
-        this.hostSocket = new ServerSocket(localPort);
     }
 
     public void listenForConnections() {
@@ -77,15 +74,6 @@ public class Server implements Networked {
             connectionThread.interrupt();
         connectionThread = new Thread(() -> {
             while (!hostSocket.isClosed()) {
-                if (clients.size() >= 4) {
-                    try {
-                        System.err.println("Waiting 2 seconds...");
-                        TimeUnit.SECONDS.sleep(2);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                    continue;
-                }
                 try {
                     ClientItem client = new ClientItem(hostSocket.accept());
                     clients.add(client);
@@ -96,8 +84,8 @@ public class Server implements Networked {
 
                     listenForPackets();
                 } catch (Exception e) {
-                    System.err.println("[!!Error]> Connecting with clients: " + e.getMessage());
                     e.printStackTrace();
+                    System.err.println("[!!Error]> Connecting with clients: " + e.getMessage());
                     closeEverything();
                     break;
                 }
@@ -114,13 +102,19 @@ public class Server implements Networked {
                 while (client.socket.isConnected()) {
                     try {
                         byte flag = client.inputStream.readByte();
-
+                        System.err.println(
+                                "Server: Received flag: " + flag + " from client: " + client.id);
                         switch (ConnFlags.fromByte(flag)) {
                             case Message:
+                                // System.err.println(
+                                // "Server: Received Message from client: " + client.id);
                                 String message = client.inputStream.readUTF();
                                 sendMsgFromClient(client.id, message);
                                 break;
                             case PlayerDisconnected:
+                                System.err.println(
+                                        "Server: Received PlayerDisconnected from client: "
+                                        + client.id);
                                 client.close();
                                 if (clients.indexOf(client) == 0) {
                                     closeEverything();
@@ -129,23 +123,27 @@ public class Server implements Networked {
                                 clients.remove(client);
                                 break;
                             case SyncPlayer:
+                                System.err.println(
+                                        "Server: Received SyncPlayer from client: " + client.id);
                                 syncPlayerState(client);
                                 break;
                             case SendIds:
+                                System.err.println(
+                                        "Server: Received SendIds from client: " + client.id);
                                 client.outputStream.writeByte(ConnFlags.SendIds.getAsByte());
                                 client.outputStream.writeInt(client.id);
                                 client.outputStream.flush();
                                 break;
-                            case CloseConnection:
-                                // break;
                             case Invalid:
+                                System.err.println("Server: Received Invalid or other from client: "
+                                        + client.id);
+                                // throw new Exception("Invalid flag");
                             default:
                                 break;
-                                // throw new Exception("Invalid flag");
                         }
                     } catch (Exception e) {
-                        System.err.println("[!!Error]> Receiving message: " + e.getMessage());
                         e.printStackTrace();
+                        System.err.println("[!!Error]> Receiving message: " + e.getMessage());
                         client.close();
                         clients.remove(client);
                         break;
@@ -163,9 +161,10 @@ public class Server implements Networked {
             if (c.id == client.id)
                 continue;
             c.outputStream.writeByte(ConnFlags.SyncPlayer.getAsByte());
-            c.outputStream.writeInt(c.id);
+            c.outputStream.writeInt(client.id);
             c.outputStream.writeFloat((float) pos.getX());
             c.outputStream.writeFloat((float) pos.getY());
+            c.outputStream.flush();
         }
     }
 
@@ -181,8 +180,8 @@ public class Server implements Networked {
                 client.outputStream.flush();
             }
         } catch (Exception e) {
-            System.err.println("[!!Error]> Sending message: " + e.getMessage());
             e.printStackTrace();
+            System.err.println("[!!Error]> Sending message: " + e.getMessage());
             closeEverything();
         }
     }
@@ -224,8 +223,8 @@ public class Server implements Networked {
                 client.outputStream.flush();
             }
         } catch (Exception e) {
-            System.err.println("[!!Error]> Sending message: " + e.getMessage());
             e.printStackTrace();
+            System.err.println("[!!Error]> Sending message: " + e.getMessage());
             closeEverything();
         }
     }
@@ -243,8 +242,8 @@ public class Server implements Networked {
                 connectionThread.interrupt();
             clients.clear();
         } catch (Exception e) {
-            System.err.println("Error closing everything: " + e.getMessage());
             e.printStackTrace();
+            System.err.println("Error closing everything: " + e.getMessage());
         }
     }
 

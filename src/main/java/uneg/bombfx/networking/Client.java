@@ -5,6 +5,7 @@ import java.io.DataOutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.util.concurrent.TimeUnit;
+import javafx.application.Platform;
 import javafx.geometry.Point2D;
 import javafx.scene.layout.VBox;
 
@@ -28,27 +29,20 @@ public class Client implements Networked {
     private InetAddress serverAddr;
     private int serverPort;
 
-    public Client(InetAddress serverIp, int serverPort) throws Exception {
+    public Client(InetAddress serverIp, int serverPort) {
         this.serverAddr = serverIp;
         this.serverPort = serverPort;
-        try {
-            connect(this.serverAddr, this.serverPort);
-        } catch (Exception e) {
-            throw new Exception("Error creating client socket: " + e.getMessage());
-        }
     }
 
-    public void connect(InetAddress serverAddr, int serverPort) throws Exception {
-        this.socket = new Socket(serverAddr, serverPort);
-        this.inputStream = new DataInputStream(socket.getInputStream());
-        this.outputStream = new DataOutputStream(socket.getOutputStream());
-        this.socket.setTcpNoDelay(true);
-
+    public void connect() throws Exception {
         try {
-            System.err.println("Waiting 1 seconds...");
-            TimeUnit.SECONDS.sleep(1);
+            this.socket = new Socket(this.serverAddr, this.serverPort);
+            this.inputStream = new DataInputStream(socket.getInputStream());
+            this.outputStream = new DataOutputStream(socket.getOutputStream());
+            this.socket.setTcpNoDelay(true);
         } catch (Exception e) {
             e.printStackTrace();
+            throw new Exception("Error creating client socket: " + e.getMessage());
         }
 
         new Thread(() -> {
@@ -58,7 +52,7 @@ public class Client implements Networked {
                     throw new Exception("Wrong flag for id");
                 }
                 this.id = inputStream.readInt();
-                System.err.println("\n\n ->>> Connected to server with id: " + this.id);
+                System.err.println("\n\n->>> Connected to server with id: " + this.id);
             } catch (Exception e) {
                 e.printStackTrace();
                 System.err.println("[!!Error]> Receiving id: " + e.getMessage());
@@ -78,31 +72,35 @@ public class Client implements Networked {
             while (socket.isConnected()) {
                 try {
                     byte flag = inputStream.readByte();
+                    System.err.println("Client: Received flag: " + flag);
 
                     switch (ConnFlags.fromByte(flag)) {
                         case Message:
+                            System.err.println("Client: Received message");
+
                             String message = inputStream.readUTF();
-                            System.err.println("Received message: " + message);
                             la.addLabel(message, textBox);
                             break;
                         case CloseConnection:
+                            System.err.println("Client: Received CloseConnection");
                             closeEverything();
-                            App.setRoot("views/MainMenuUI");
+                            Platform.runLater(() -> { App.setRoot("views/MainMenuUI"); });
                             break;
                         case StartGame:
+                            System.err.println("Client: Received StartGame");
                             playerCount = inputStream.readInt();
                             System.err.println("Starting game, with " + playerCount + " players");
-                            App.getGameEngine().startGame();
+                            Platform.runLater(() -> { App.getGameEngine().startGame(); });
                             break;
                         case SyncPlayer:
+                            System.err.println("Client: Received SyncPlayer");
                             if (syncObj == null)
                                 break;
                             handlePlayerSync();
                             break;
-                        // case PlayerConnected:
-                        case PlayerDisconnected:
-                            break;
                         case Invalid:
+                            System.err.println("Client: Received Invalid or other");
+                            // throw new Exception("Invalid flag");
                         default:
                             break;
                             // throw new Exception("Invalid flag");

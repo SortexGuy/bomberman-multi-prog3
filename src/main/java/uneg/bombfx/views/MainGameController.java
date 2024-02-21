@@ -41,6 +41,9 @@ public class MainGameController implements Initializable {
     @FXML
     private VBox textBox;
 
+    AnimationTimer updateThread = null;
+    AnimationTimer drawThread = null;
+
     @Override
     public void initialize(URL url, ResourceBundle rb) {
         Engine appEngine = App.getGameEngine();
@@ -53,36 +56,26 @@ public class MainGameController implements Initializable {
             }
         });
 
-        try {
-            System.err.println("Waiting 2 seconds...");
-            TimeUnit.SECONDS.sleep(2);
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
         appEngine.startup(sendButton, textBox, messageField, new Engine.LabelAdder() {
             public void addLabel(String message, VBox myTextBox) {
                 MainGameController.addLabel(message, myTextBox);
             }
-        }, gameCanvas.getGraphicsContext2D());
+        }, gameCanvas);
 
         // Input events
-        App.getScene().addEventHandler(KeyEvent.KEY_PRESSED, e -> {
-            if (!messageField.isFocused() && e.getCode() == KeyCode.M) {
+        App.getScene().addEventHandler(
+                KeyEvent.KEY_PRESSED, e -> { appEngine.handleKeyPressed(e); });
+        App.getScene().addEventHandler(KeyEvent.KEY_RELEASED, e -> {
+            if (!messageField.isFocused() && e.getCode() == KeyCode.TAB) {
                 messageField.requestFocus();
             }
-            appEngine.handleKeyPressed(e);
+            appEngine.handleKeyReleased(e);
         });
-
-        // Draw event
-        new AnimationTimer() {
-            @Override
-            public void handle(long l) {
-                appEngine.draw(gameCanvas.getWidth(), gameCanvas.getHeight());
-            }
-        }.start();
 
         gameCanvas.setFocusTraversable(true);
         gameCanvas.requestFocus();
+
+        appEngine.start();
     }
 
     public static void addLabel(String message, VBox myTextBox) {

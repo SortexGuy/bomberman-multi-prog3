@@ -7,13 +7,11 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
 import uneg.bombfx.engine.Engine;
 
-/**
- * JavaFX App
- */
 public class App extends Application {
     private static Scene scene;
     private static Engine gameEngine;
@@ -28,6 +26,32 @@ public class App extends Application {
             System.err.println("[!!Error] Could not load FXML: " + fxml);
             System.err.println("[!!Error] Error message: " + e.getMessage());
         }
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+
+    private static Parent loadFromFXML(String fxml) throws IOException {
+        URL location = App.class.getResource(fxml + ".fxml");
+        Parent hierarchy = new AnchorPane();
+        hierarchy = FXMLLoader.load(location);
+        return hierarchy;
+    }
+
+    @Override
+    public void start(Stage stage) throws IOException {
+        Parent hierarchy = App.loadFromFXML("views/MainMenuUI");
+        scene = new Scene(hierarchy, 960, 540, Color.BLACK);
+
+        stage.setTitle("Man de las Bombas FX");
+        stage.setFullScreen(false);
+        stage.setMaximized(false);
+        stage.setResizable(false);
+        stage.centerOnScreen();
+
+        stage.setScene(scene);
+        stage.show();
     }
 
     public static Scene getScene() {
@@ -48,31 +72,5 @@ public class App extends Application {
 
     public static void setHosting(boolean hosting) {
         App.hosting = hosting;
-    }
-
-    public static void main(String[] args) {
-        launch(args);
-    }
-
-    private static Parent loadFromFXML(String fxml) throws IOException {
-        URL location = App.class.getResource(fxml + ".fxml");
-        Parent hierarchy = new AnchorPane();
-        hierarchy = FXMLLoader.load(location);
-        return hierarchy;
-    }
-
-    @Override
-    public void start(Stage stage) throws IOException {
-        Parent hierarchy = App.loadFromFXML("views/MainMenuUI");
-        scene = new Scene(hierarchy, 960, 540);
-
-        stage.setTitle("Man de las Bombas FX");
-        stage.setFullScreen(false);
-        stage.setMaximized(false);
-        stage.setResizable(false);
-        stage.centerOnScreen();
-
-        stage.setScene(scene);
-        stage.show();
     }
 }
