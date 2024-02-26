@@ -59,7 +59,7 @@ public class Player {
         double x = (left) ? -1.0 : (right) ? 1.0 : 0;
         double y = (up) ? -1.0 : (down) ? 1.0 : 0;
         Point2D dir = new Point2D(x, y).normalize();
-        pos = pos.add(dir.multiply(3.0));
+        pos = pos.add(dir.multiply(200.0).multiply(delta));
     }
 
     public void draw(GraphicsContext gContext) {

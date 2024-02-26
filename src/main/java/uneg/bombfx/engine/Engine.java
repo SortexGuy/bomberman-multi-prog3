@@ -161,7 +161,7 @@ public class Engine {
             }
 
             public void sync(double deltaTime) {
-                float tickDur = 0.25f;
+                float tickDur = 0.033f;
                 timeMsToTick += deltaTime;
                 if (timeMsToTick >= tickDur) {
                     syncEngine();
@@ -221,7 +221,8 @@ public class Engine {
     }
 
     public void closeConnection() {
-        gameLoop.stop();
+        if (gameLoop != null)
+            gameLoop.stop();
         gameLoop = null;
         if (server != null)
             server.closeEverything();

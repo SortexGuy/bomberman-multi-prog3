@@ -25,20 +25,20 @@ public abstract class GameLoop extends AnimationTimer {
         }
 
         long deltaNano = nowNano - lastNano;
-        double deltaMs = ((double) deltaNano) / 1_000_000.0;
+        double deltaS = ((double) deltaNano) / 1_000_000_000.0;
         lastNano = nowNano;
 
-        if (deltaMs > max || max == -1)
-            max = deltaMs;
-        if (deltaMs < min || min == -1)
-            min = deltaMs;
+        if (deltaS > max || max == -1)
+            max = deltaS;
+        if (deltaS < min || min == -1)
+            min = deltaS;
 
         if (debugDelta <= 0) {
-            System.err.println("[DELTA> " + deltaMs + " | MAX> " + max + " | MIN> " + min + "]");
+            System.err.println("[DELTA> " + deltaS + " | MAX> " + max + " | MIN> " + min + "]");
             debugDelta = 30;
         }
-        tick(deltaMs);
-        sync(deltaMs);
+        tick(deltaS);
+        sync(deltaS);
         debugDelta--;
     }
 
