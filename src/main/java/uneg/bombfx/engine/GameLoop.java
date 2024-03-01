@@ -3,14 +3,13 @@ package uneg.bombfx.engine;
 import javafx.animation.AnimationTimer;
 
 public abstract class GameLoop extends AnimationTimer {
-    int debugDelta = 0;
-    long lastNano = 0;
-    double max = -1;
-    double min = -1;
+    private long lastNano = 0;
+    private double max = -1;
+    private double min = -1;
+    private double timeToTick = 0;
 
     @Override
     public void start() {
-        debugDelta = 0;
         lastNano = 0;
         max = -1;
         min = -1;
@@ -28,18 +27,22 @@ public abstract class GameLoop extends AnimationTimer {
         double deltaS = ((double) deltaNano) / 1_000_000_000.0;
         lastNano = nowNano;
 
-        if (deltaS > max || max == -1)
-            max = deltaS;
-        if (deltaS < min || min == -1)
-            min = deltaS;
+        double tickDur = 1 / 30.0;
+        timeToTick += deltaS;
+        if (timeToTick >= 0.0f) {
+            if (timeToTick > max || max == -1)
+                max = timeToTick;
+            if (timeToTick < min || min == -1)
+                min = timeToTick;
 
-        if (debugDelta <= 0) {
-            System.err.println("[DELTA> " + deltaS + " | MAX> " + max + " | MIN> " + min + "]");
-            debugDelta = 30;
+            tick(deltaS);
+
+            sync(deltaS);
+
+            // System.err.println("[DELTA> " + deltaS + " | TIMETODELTA> " + timeToTick +
+            // " | MAX> " + max + " | MIN> " + min + "]");
+            timeToTick -= tickDur;
         }
-        tick(deltaS);
-        sync(deltaS);
-        debugDelta--;
     }
 
     public abstract void tick(double deltaTime);

@@ -12,6 +12,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
 import uneg.bombfx.App;
+import uneg.bombfx.components.LevelGrid;
 import uneg.bombfx.components.Player;
 import uneg.bombfx.networking.Client;
 import uneg.bombfx.networking.Server;
@@ -20,10 +21,12 @@ import uneg.bombfx.networking.Server;
  * Engine
  */
 public class Engine {
-    private GameLoop gameLoop;
     private int tickCount = 0;
-    private double timeMsToTick = 0;
+    private double timeSecToTick = 0;
+
+    private GameLoop gameLoop;
     private Player[] players;
+    private LevelGrid levelGrid;
     private GraphicsContext gContext;
 
     private boolean isHost = false;
@@ -98,11 +101,13 @@ public class Engine {
             Canvas gameCanvas) {
         int playerCount = client.getPlayerCount();
 
+        levelGrid = new LevelGrid();
+
         if (players == null) {
             players = new Player[playerCount];
         }
         for (int i = 0; i < playerCount; i++) {
-            players[i] = new Player(i);
+            players[i] = new Player(i, levelGrid.getStartPos(i));
         }
 
         client.setSyncObj(new PlayerSyncObj() {
@@ -161,14 +166,7 @@ public class Engine {
             }
 
             public void sync(double deltaTime) {
-                float tickDur = 0.033f;
-                timeMsToTick += deltaTime;
-                if (timeMsToTick >= tickDur) {
-                    syncEngine();
-
-                    tickCount++;
-                    timeMsToTick -= tickDur;
-                }
+                syncEngine();
             }
         };
     }
@@ -178,7 +176,11 @@ public class Engine {
     }
 
     private void update(double deltaTime) {
-        players[client.getId()].update(deltaTime);
+        Player localPlayer = players[client.getId()];
+        localPlayer.update(deltaTime);
+        levelGrid.update(deltaTime);
+
+        localPlayer.handleLevelColl(levelGrid);
     }
 
     private void syncEngine() {
@@ -189,19 +191,7 @@ public class Engine {
         gContext.setFill(Color.GRAY);
         gContext.fillRect(0, 0, gameWidth, gameHeight);
 
-        for (int i = 0; i < 10; i++) {
-            for (int j = 0; j < 10; j++) {
-                int size = 48;
-                gContext.beginPath();
-                gContext.rect(i * size, j * size, size, size);
-                gContext.closePath();
-                gContext.setFill(Color.BLACK);
-                gContext.fill();
-                gContext.setStroke(Color.WHITE);
-                gContext.setLineWidth(2);
-                gContext.stroke();
-            }
-        }
+        levelGrid.draw(gContext);
 
         for (Player p : players) {
             p.draw(gContext);

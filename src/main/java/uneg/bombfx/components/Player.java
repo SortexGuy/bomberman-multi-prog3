@@ -4,6 +4,7 @@ import javafx.geometry.Point2D;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 
 import uneg.bombfx.components.InputHandler.InputOrder;
 import uneg.bombfx.networking.Client;
@@ -12,33 +13,19 @@ import uneg.bombfx.networking.Client;
  * Player
  */
 public class Player {
+    private final double SPEED = 200.0;
     private int id;
     private Point2D pos;
     private Point2D lastPos = new Point2D(0, 0);
+    private Point2D lastDir = new Point2D(0, 0);
+    private double lastDelta = 0.0;
     private Point2D size;
     private InputHandler inputHandler;
 
-    public Player(int id) {
+    public Player(int id, Point2D pos) {
         this.id = id;
-        switch (id) {
-            case 0:
-                pos = new Point2D(48 + 16, 48 + 16);
-                break;
-            case 1:
-                pos = new Point2D(48 * 9 + 16, 48 + 16);
-                break;
-            case 2:
-                pos = new Point2D(48 + 16, 48 * 9 + 16);
-                break;
-            case 3:
-                pos = new Point2D(48 * 9 + 16, 48 * 9 + 16);
-                break;
-            default:
-                pos = new Point2D(0, 0);
-                break;
-        }
-        // pos = new Point2D((id % 2) * (48 * 8), (id / 3) * (48 * 8));
-        size = new Point2D(32, 32);
+        this.pos = pos.add(2.0, 2.0);
+        size = new Point2D(28, 28);
         inputHandler = new InputHandler();
     }
 
@@ -59,12 +46,13 @@ public class Player {
         double x = (left) ? -1.0 : (right) ? 1.0 : 0;
         double y = (up) ? -1.0 : (down) ? 1.0 : 0;
         Point2D dir = new Point2D(x, y).normalize();
-        pos = pos.add(dir.multiply(200.0).multiply(delta));
+        lastDir = dir;
+        lastDelta = delta;
+        Point2D vel = dir.multiply(delta * SPEED);
+        pos = pos.add(vel);
     }
 
     public void draw(GraphicsContext gContext) {
-        Point2D realPos = new Point2D(pos.getX() - size.getX() / 2, pos.getY() - size.getY() / 2);
-
         Color c;
         switch (id) {
             case 0:
@@ -86,7 +74,7 @@ public class Player {
         gContext.setFill(c);
         // gContext.fillRect(realPos.getX(), realPos.getY(), size.getX(), size.getY());
         gContext.beginPath();
-        gContext.rect(realPos.getX(), realPos.getY(), size.getX(), size.getY());
+        gContext.rect(pos.getX(), pos.getY(), size.getX(), size.getY());
         gContext.closePath();
         gContext.fill();
         gContext.setStroke(Color.BLACK);
@@ -97,7 +85,19 @@ public class Player {
     public void sync(Client client) {
         if (lastPos != null && pos.distance(lastPos) > 0.5) {
             lastPos = pos;
-            client.sendSyncPPos(pos);
+            // client.sendSyncPPos(pos);
+        }
+    }
+
+    public void handleLevelColl(LevelGrid level) {
+        Point2D collFrom = level.checkPColl(new Rectangle(pos.getX(), pos.getY(), size.getX(), size.getY()));
+        if (collFrom == Point2D.ZERO)
+            return;
+
+        Point2D collDir = collFrom.subtract(pos).normalize();
+        if (lastDir.distance(collDir) <= 45.0f) {
+            pos = pos.subtract(lastDir.multiply(lastDelta * SPEED));
+            lastDir = Point2D.ZERO;
         }
     }
 
