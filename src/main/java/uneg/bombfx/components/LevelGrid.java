@@ -28,8 +28,12 @@ public class LevelGrid {
             this.pos = pos;
             this.type = type;
             if (type == Type.CLEAR) {
-                color = Color.YELLOW;
+                color = Color.GHOSTWHITE;
             }
+            if (type == Type.BREAKABLE) {
+                color = Color.BURLYWOOD;
+            }
+
         }
 
         void draw(GraphicsContext gContext) {
@@ -52,8 +56,14 @@ public class LevelGrid {
             boolean result = rect1.getBoundsInParent().intersects(rect2.getBoundsInParent());
             if (result) {
                 color = Color.RED;
-            } else {
-                color = Color.BLACK;
+            } 
+            else {
+                if (type == Type.BREAKABLE) {
+                    color = Color.BURLYWOOD;
+                }
+                if (type == Type.SOLID) {
+                    color = Color.BLACK;
+                }
             }
             return result;
         }
@@ -95,13 +105,29 @@ public class LevelGrid {
                 Point2D pos = new Point2D(
                         gridRect.getX() + i * GRID_SIZE, gridRect.getY() + j * GRID_SIZE);
                 GridCell.Type type = GridCell.Type.CLEAR;
-                if (i == 0 || j == 0 || i == GRID_NUM - 1 || j == GRID_NUM - 1) {
+                if (i == 0 || j == 0 || i == GRID_NUM - 1 || j == GRID_NUM - 1 || i % 2 == 0 && j % 2 == 0) {
                     type = GridCell.Type.SOLID;
+                }
+ 
+                else if( Math.random() < 0.4 && !isPlayerNeir(pos)) {
+                    type = GridCell.Type.BREAKABLE;
                 }
                 GridCell cell = new GridCell(pos, type);
                 cells.add(cell);
             }
         }
+    }
+
+    public boolean isPlayerNeir(Point2D pos) {
+
+        for (int i = 0; i < 4; i++) {
+
+            Point2D start = getStartPos(i);
+            if ((Math.abs(pos.getX() - start.getX())) <= GRID_SIZE && (Math.abs(pos.getY() - start.getY())) <= GRID_SIZE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void update(double delta) {
