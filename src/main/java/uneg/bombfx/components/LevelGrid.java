@@ -6,7 +6,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
-public class LevelGrid {
+public class LevelGrid extends Object {
     private final int GRID_SIZE = 32;
     private final int GRID_NUM = 13;
     public ArrayList<GridCell> cells = new ArrayList<LevelGrid.GridCell>();
@@ -33,7 +33,6 @@ public class LevelGrid {
             if (type == Type.BREAKABLE) {
                 color = Color.BURLYWOOD;
             }
-
         }
 
         void draw(GraphicsContext gContext) {
@@ -56,16 +55,19 @@ public class LevelGrid {
             boolean result = rect1.getBoundsInParent().intersects(rect2.getBoundsInParent());
             if (result) {
                 color = Color.RED;
-            } 
-            else {
+            } else {
                 if (type == Type.BREAKABLE) {
                     color = Color.BURLYWOOD;
-                }
-                if (type == Type.SOLID) {
+                } else if (type == Type.SOLID) {
                     color = Color.BLACK;
                 }
             }
             return result;
+        }
+
+        boolean isInside(Point2D p) {
+            Rectangle rect2 = getRect();
+            return rect2.contains(p);
         }
 
         public Rectangle getRect() {
@@ -105,11 +107,11 @@ public class LevelGrid {
                 Point2D pos = new Point2D(
                         gridRect.getX() + i * GRID_SIZE, gridRect.getY() + j * GRID_SIZE);
                 GridCell.Type type = GridCell.Type.CLEAR;
-                if (i == 0 || j == 0 || i == GRID_NUM - 1 || j == GRID_NUM - 1 || i % 2 == 0 && j % 2 == 0) {
+
+                if (i == 0 || j == 0 || i == GRID_NUM - 1 || j == GRID_NUM - 1
+                        || (i % 2 == 0 && j % 2 == 0)) {
                     type = GridCell.Type.SOLID;
-                }
- 
-                else if( Math.random() < 0.4 && !isPlayerNeir(pos)) {
+                } else if (Math.random() < 0.4 && !isPlayerNear(pos)) {
                     type = GridCell.Type.BREAKABLE;
                 }
                 GridCell cell = new GridCell(pos, type);
@@ -118,12 +120,11 @@ public class LevelGrid {
         }
     }
 
-    public boolean isPlayerNeir(Point2D pos) {
-
+    private boolean isPlayerNear(Point2D pos) {
         for (int i = 0; i < 4; i++) {
-
             Point2D start = getStartPos(i);
-            if ((Math.abs(pos.getX() - start.getX())) <= GRID_SIZE && (Math.abs(pos.getY() - start.getY())) <= GRID_SIZE) {
+            if (Math.abs(pos.getX() - start.getX()) <= GRID_SIZE
+                    && Math.abs(pos.getY() - start.getY()) <= GRID_SIZE) {
                 return true;
             }
         }
@@ -157,21 +158,42 @@ public class LevelGrid {
 
     public Point2D getStartPos(int id) {
         Point2D pos = new Point2D(0, 0);
+        int idx = 0;
         switch (id) {
             case 0:
-                pos = new Point2D(gridRect.getX() + GRID_SIZE, gridRect.getY() + GRID_SIZE);
+                idx = 1 + 1 * GRID_NUM;
+                if (cells.size() <= idx)
+                    return pos;
+                pos = cells.get(idx).getCenter();
+                break;
             case 1:
-                pos = new Point2D(
-                        gridRect.getX() + GRID_SIZE * (GRID_NUM - 2), gridRect.getY() + GRID_SIZE);
+                // idx = (GRID_NUM - 2) + 1 * (GRID_NUM - 1);
+                // pos = cells.get(idx).getCenter();
+                break;
             case 2:
-                pos = new Point2D(
-                        gridRect.getX() + GRID_SIZE, gridRect.getY() + GRID_SIZE * (GRID_NUM - 2));
+                // idx = 1 + (GRID_NUM - 2) * (GRID_NUM - 1);
+                // pos = cells.get(idx).getCenter();
+                break;
             case 3:
-                pos = new Point2D(gridRect.getX() + GRID_SIZE * (GRID_NUM - 2),
-                        gridRect.getY() + GRID_SIZE * (GRID_NUM - 2));
+                // idx = (GRID_NUM - 2) + (GRID_NUM - 2) * (GRID_NUM - 1);
+                // pos = cells.get(idx).getCenter();
             default:
                 break;
         }
         return pos;
+    }
+
+    public Point2D getBombPos(Point2D pos) {
+        Point2D ret_pos = Point2D.ZERO;
+        for (GridCell cell : cells) {
+            if (!cell.isInside(pos))
+                continue;
+
+            if (cell.getType() == GridCell.Type.CLEAR) {
+                ret_pos = cell.getCenter();
+                break;
+            }
+        }
+        return ret_pos;
     }
 }

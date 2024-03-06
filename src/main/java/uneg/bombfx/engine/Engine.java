@@ -1,6 +1,7 @@
 package uneg.bombfx.engine;
 
 import java.net.InetAddress;
+import java.util.ArrayList;
 import javafx.geometry.Point2D;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -12,6 +13,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
 import uneg.bombfx.App;
+import uneg.bombfx.components.Bomb;
 import uneg.bombfx.components.LevelGrid;
 import uneg.bombfx.components.Player;
 import uneg.bombfx.networking.Client;
@@ -25,7 +27,8 @@ public class Engine {
     private double timeSecToTick = 0;
 
     private GameLoop gameLoop;
-    private Player[] players;
+    private ArrayList<Player> players;
+    private ArrayList<Bomb> bombs;
     private LevelGrid levelGrid;
     private GraphicsContext gContext;
 
@@ -103,11 +106,10 @@ public class Engine {
 
         levelGrid = new LevelGrid();
 
-        if (players == null) {
-            players = new Player[playerCount];
-        }
+        players = new ArrayList<Player>(playerCount + 1);
         for (int i = 0; i < playerCount; i++) {
-            players[i] = new Player(i, levelGrid.getStartPos(i));
+            players.add(new Player(i, levelGrid));
+            // players.set(i, new Player(i, levelGrid));
         }
 
         client.setSyncObj(new PlayerSyncObj() {
@@ -176,15 +178,13 @@ public class Engine {
     }
 
     private void update(double deltaTime) {
-        Player localPlayer = players[client.getId()];
+        Player localPlayer = players.get(client.getId());
         localPlayer.update(deltaTime);
         levelGrid.update(deltaTime);
-
-        localPlayer.handleLevelColl(levelGrid);
     }
 
     private void syncEngine() {
-        players[client.getId()].sync(client);
+        players.get(client.getId()).sync(client);
     }
 
     private void draw(double gameWidth, double gameHeight) {
@@ -199,7 +199,7 @@ public class Engine {
     }
 
     public void handleKeyPressed(KeyEvent e) {
-        players[client.getId()].handleInputPressed(e);
+        players.get(client.getId()).handleInputPressed(e);
     }
 
     public void handleKeyReleased(KeyEvent e) {
@@ -207,7 +207,7 @@ public class Engine {
             closeConnection();
             App.setRoot("views/MainMenuUI");
         }
-        players[client.getId()].handleInputReleased(e);
+        players.get(client.getId()).handleInputReleased(e);
     }
 
     public void closeConnection() {
@@ -228,7 +228,11 @@ public class Engine {
         App.setRoot("views/MainGameUI");
     }
 
-    public Player[] getPlayers() {
+    public ArrayList<Player> getPlayers() {
         return players;
+    }
+
+    public void addBomb(Point2D pos, int id) {
+        bombs.add(new Bomb(id, pos, players, levelGrid));
     }
 }
